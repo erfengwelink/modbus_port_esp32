@@ -322,9 +322,7 @@ int get_p_hold_buf(int i)
 }
 
 int get_p_coil_buf(int i)
-{   printf("s_buf [0] %d \r\n", ucMCoilBuf[ucMBMasterGetDestAddress() - 1][0]);
-    //for(int j = 0; j < 4; j++)
-        printf("$get_p_coil_buf[%d]:%d\r\n", i, ucMCoilBuf[ucMBMasterGetDestAddress() - 1][i]);
+{  
     return (int)ucMCoilBuf[ucMBMasterGetDestAddress() - 1][i];
 }
 
