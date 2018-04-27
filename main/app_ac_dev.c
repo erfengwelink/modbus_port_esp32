@@ -107,6 +107,11 @@ typedef struct
 typedef enum {
     MD_INPUT_SET_TEMP,
     MD_INPUT_CUR_TEMP,
+    MD_INPUT_OUT_ONLINE_0_3,
+    MD_INPUT_IN_ONLINE_0_15,
+    MD_INPUT_IN_ONLINE_16_31,
+    MD_INPUT_IN_ONLINE_32_47,
+    MD_INPUT_IN_ONLINE_48_63,
 } inputParam_t;
 
 typedef struct
@@ -175,6 +180,13 @@ const static descIndex_t descTab[] = {
 const static inputIndex_t inputTab[] = {
     {MD_INPUT_SET_TEMP, 4, 0, 0, USER_SET_TEMP},
     {MD_INPUT_CUR_TEMP, 5, 0, 0, INDOOR_TEMP},
+
+    {MD_INPUT_OUT_ONLINE_0_3, 18, 4, 0, OUT_MACHINE_0_3_ONLINE},
+    {MD_INPUT_IN_ONLINE_0_15, 19, 16, 0, IN_MACHINE_0_15_ONLINE},
+    {MD_INPUT_IN_ONLINE_16_31, 20, 16, 0, IN_MACHINE_16_31_ONLINE},
+    {MD_INPUT_IN_ONLINE_32_47, 21, 16, 0, IN_MACHINE_32_47_ONLINE},
+    {MD_INPUT_IN_ONLINE_48_63, 22, 16, 0, IN_MACHINE_48_63_ONLINE},
+    
 };
 
 static int get_dest_addr(const int index, const int acNo, const int offset)
@@ -221,6 +233,26 @@ static int acnum2addr(
     return addr;
 }
 
+static void online_bits_dump(const int data)
+{
+    printf(" ' '---> offline\r\n");
+    printf(" '*'---> online\r\n");
+    printf(" 0 1 2 3 4 5 6 7 8 9 A B C D E F \r\n");
+    printf(" - - - - - - - - - - - - - - - - \r\n");
+    for(int i = 0; i < 16; i++)
+    {
+        if(data & (0x01<<i))
+        {
+            printf(" *");
+        }
+        else
+        {
+            printf("  ");
+        }
+    }
+    printf("\r\n");
+}
+
 static int input_reg_unpack(inputParam_t param, int *pdata)
 {
     readMideaInputFunc_t res = INPUT_REG_INVALID;
@@ -234,6 +266,10 @@ static int input_reg_unpack(inputParam_t param, int *pdata)
     }
     else // for bit operate.
     {
+        *pdata = data;
+        res = entry.res;
+        online_bits_dump(data);
+        //online_bits_dump(7);
     }
     return res;
 }
@@ -256,11 +292,11 @@ static int discrete_reg_unpack(descParam_t param, int *pdata)
         if (data & (0x01 << start))
         {
             result += 1;
-            MB_LOG("$", "[[[[ pwr on ]]]");
+            MB_LOG("$", "[[[[ bit param on ]]]");
         }
         else
         {
-            MB_LOG("$", "[[[[ pwr off ]]]");
+            MB_LOG("$", "[[[[ bit param off ]]]");
         }
         *pdata = result;
         return 0;
@@ -594,8 +630,19 @@ int app_ac_get_param_ex(const int addr,
     return ret;
 }
 
-int read_all_stuff_online_dev()
+int read_all_stuff_online_dev(int n, int devIDs)
 {
+    int bits = 0;
+    int updated = update_target_ac_read_data(MD_TEMP_GET, devIDs);
+    if (0 == updated) //update ok
+    {
+        input_reg_unpack(MD_INPUT_CUR_TEMP + n, &bits);
 
+        MB_LOG(TAG, "bits : %d ", bits);
+    }
+    else
+    {
+        MB_LOG(TAG, "update_target_ac_read_data ->MD_TEMP_GET failed!!!");
+    }
     return 0;
 }
