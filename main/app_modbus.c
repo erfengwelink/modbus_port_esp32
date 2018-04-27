@@ -346,7 +346,7 @@ void modebus_task(void *parameter)
             while (1)
             {
                 eMBMasterPoll();
-                vTaskDelay(30);
+                //vTaskDelay(30);
             }
         }
         else

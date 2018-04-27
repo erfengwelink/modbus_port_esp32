@@ -65,10 +65,42 @@ static void register_free()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
+#include "app_ac_dev.h"
+static int restart(int argc, char** argv)
+{
+    ESP_LOGI(__func__, "Restarting");
+    int mode = 0;
+    int speed = 0;
+    int temp = 0;
+    int swing = 0;
+    int set = 0;
+
+    assert(3 == argc);
+    //uint16_t rw_data = 0;
+    int inout = atoi(argv[1]);
+    int acoffset = atoi(argv[2]);
+    app_ac_get_param_ex(1, inout, BRAND_MIDEA, &mode, &temp, &speed, &swing, &set);
+    ESP_LOGI(TAG, "app_ac_get_param_ex :: mode:%d | temp = %d | speed = %d | swing = %d | set = %d", 
+    mode, temp, speed, swing, set);
+    //esp_restart();
+    return 0;
+}
+
+static void register_restart()
+{
+    const esp_console_cmd_t cmd = {
+        .command = "restart",
+        .help = "Restart the program",
+        .hint = NULL,
+        .func = &restart,
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
 void app_console_register_default()
 {
     register_free();
-    
+    register_restart();
 
 }
 

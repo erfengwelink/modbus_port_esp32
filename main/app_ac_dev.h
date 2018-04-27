@@ -1,22 +1,8 @@
 #ifndef _APP_AC_DEV_H_
 #define _APP_AC_DEV_H_
-/** agency:midea
- * 
- * read coils
- * 
- */
+
 #include "mbconfig.h"
 #include "stdint.h"
-
-/* midea */
-#define READ_MIDEA_COILS_BASE_ADDR 0
-#define READ_MIDEA_INPUT_REG_BASE_ADDR 30000
-#define READ_MIDEA_HOLDING_REG_BASE_ADDR 40000
-
-/* haier */
-#define READ_HAIER_HOLDING_BASE_ADDR 0
-#define WRITE_HAIER_SINGLE_BASE_ADDR 0
-#define WRITE_HAIER_HOLDING_BASE_ADDR 0
 
 typedef enum ac_mode_t {
     ACMODE_FAN = 1,
@@ -81,10 +67,7 @@ typedef enum {
     HAIER_WRITE_HOLDING_REG = 0x10
 } haierFuncType_t;
 
-/**
- * read coil result
- * 
- */
+// read Descrete result
 typedef enum {
     //MODE
     MD_CURR_WIND_MODE_R,
@@ -115,15 +98,31 @@ typedef enum {
     MD_OIL_RETURN_R,
     MD_IGNOR_4,
     MD_IGNOR_5,
+    
     //auxi
-    MD_ECON_RUN_R,
-    MD_ELECTRIC_PAVING_R,
-    MD_SWING_R,
-    MD_AERATION_R,
-    MD_FRESH_R,
-    MD_HUMIDIFY_R,
-    MD_ADD_OXYGEN_R,
-    MD_DRY_R,
+    MD_ECON_RUN_OFF_R,
+    MD_ECON_RUN_ON_R,
+
+    MD_ELECTRIC_PAVING_OFF_R,
+    MD_ELECTRIC_PAVING_ON_R,
+
+    MD_SWING_OFF_R,
+    MD_SWING_ON_R,
+
+    MD_AERATION_OFF_R,
+    MD_AERATION_ON_R,
+
+    MD_FRESH_OFF_R,
+    MD_FRESH_ON_R,
+
+    MD_HUMIDIFY_OFF_R,
+    MD_HUMIDIFY_ON_R,
+
+    MD_ADD_OXYGEN_OFF_R,
+    MD_ADD_OXYGEN_ON_R,
+
+    MD_DRY_OFF_R,
+    MD_DRY_ON_R,
     //EXTRA0
     MD_HORIZ_SWING_R,
     MD_ADD_WATER_R,
@@ -136,14 +135,8 @@ typedef enum {
     
     MD_COIL_PARAM_INVALID_R
 } readDescreteResult_t;
-//readCoilResult_t;
 
-/**
- * read input register
- * 
- */
-   
-
+// read input register
 typedef enum {
     SYS_STATE = 1,
     DEV_INFO_1,
@@ -252,32 +245,20 @@ typedef enum {
                    MD_AUXI_SWING | MD_AUXI_AIR_FRESH
 } MDAuxiSet_t;
 
-
 typedef enum {
     MD_PWR_SET,
     MD_MODE_SET,
     MD_SPEED_SET,
     MD_TEMP_SET,
     MD_AUXI_SET,
-
     MD_DESCRETE_GET,
-
     MD_TEMP_GET,
-
     MD_PARAM_MAX,
 } mideaReqParam_t;
-
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-int acnum2addr(const mideaDevType_t dev,const int acNo,
-    const int offset,const mideaFuncType_t cmd);
-
-int load_midea_param(const mideaReqParam_t req, const int acNo, uint16_t wdata);
-
 
 // AC open power 1/ON, 0/OFF
 int app_ac_set_power(const int addr, const int devIDs, const int ison);
