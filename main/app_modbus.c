@@ -1,13 +1,15 @@
 #include "app_modbus.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_log.h"
+#include "port.h"
 
 static const char *TAG = "APP_MODBUS:";
 //#define MB_LOG(...)
 #define MB_LOG(...) ESP_LOGW(__VA_ARGS__)
 
-#define T_WAIT_FOREVER -1
+#define T_WAIT_FOREVER 3
 
 USHORT usMDiscInStart = M_DISCRETE_INPUT_START;
 #if M_DISCRETE_INPUT_NDISCRETES % 8
@@ -28,6 +30,70 @@ USHORT usMRegInBuf[MB_MASTER_TOTAL_SLAVE_NUM][M_REG_INPUT_NREGS];
 //Master mode:HoldingRegister variables
 USHORT usMRegHoldStart = M_REG_HOLDING_START;
 USHORT usMRegHoldBuf[MB_MASTER_TOTAL_SLAVE_NUM][M_REG_HOLDING_NREGS];
+
+static const int DESCRETE_DONE_BIT = BIT1;
+static const int INPUTREG_DONE_BIT = BIT2;
+
+static EventGroupHandle_t descrete_done_event_group;
+static EventGroupHandle_t input_reg_done_event_group;
+
+static int event_groups_create()
+{
+    descrete_done_event_group = xEventGroupCreate();
+    input_reg_done_event_group = xEventGroupCreate();
+    return 0;
+}
+int descret_event_gp_bit_clear()
+{
+    xEventGroupClearBits(descrete_done_event_group, DESCRETE_DONE_BIT);
+    return 0;
+}
+
+static int descret_event_gp_bit_set()
+{
+    xEventGroupSetBits(descrete_done_event_group, DESCRETE_DONE_BIT);
+    return 0;
+}
+
+static int input_reg_event_gp_bit_set()
+{
+    xEventGroupSetBits(input_reg_done_event_group, INPUTREG_DONE_BIT);
+    return 0;
+}
+
+int input_reg_event_gp_bit_clear()
+{
+    xEventGroupClearBits(input_reg_done_event_group, INPUTREG_DONE_BIT);
+    return 0;
+}
+
+static int wait_event_gp_bits_done(EventGroupHandle_t hdl, int bit, int timeout)
+{
+    int ret = -1;
+    EventBits_t uxBits;
+    TickType_t st = xTaskGetTickCount();
+    do
+    {
+        uxBits = xEventGroupWaitBits(hdl, bit, true, false, portMAX_DELAY);
+        if(bit == uxBits)
+        {
+            MB_LOG(TAG, "%s ok\r\n", __func__);
+            ret = 0;
+            break;
+        }
+    } while ((xTaskGetTickCount() < st + timeout));
+    return ret;
+}
+
+int wait_descret_ev_gp_done(int timeout)
+{
+    return wait_event_gp_bits_done(descrete_done_event_group, DESCRETE_DONE_BIT, timeout);
+}
+
+int wait_input_reg_ev_gp_done(int timeout)
+{
+    return wait_event_gp_bits_done(input_reg_done_event_group, INPUTREG_DONE_BIT, timeout);
+}
 
 /**
  * Modbus master input register callback function.
@@ -63,17 +129,18 @@ eMBErrorCode eMBMasterRegInputCB(UCHAR *pucRegBuffer, USHORT usAddress, USHORT u
         {
             pusRegInputBuf[iRegIndex] = *pucRegBuffer++ << 8;
             pusRegInputBuf[iRegIndex] |= *pucRegBuffer++;
-            //MB_LOG("$"," %04X|", pusRegInputBuf[iRegIndex]);
             iRegIndex++;
             usNRegs--;
         }
+        //usr add
+        input_reg_event_gp_bit_set();
     }
     else
     {
         eStatus = MB_ENOREG;
     }
 
-#if 1
+#if 0
     for (int i = 0; i < M_REG_INPUT_NREGS; i++)
     {
         //MB_LOG("$", " %02x -", pusRegInputBuf[i]);
@@ -148,7 +215,7 @@ eMBErrorCode eMBMasterRegHoldingCB(UCHAR *pucRegBuffer, USHORT usAddress,
         eStatus = MB_ENOREG;
     }
 
-#if 1
+#if 0
     for (int i = 0; i < M_REG_HOLDING_NREGS; i++)
     {
         MB_LOG(TAG, " %02x -", pucRegBuffer[i]);
@@ -260,6 +327,7 @@ eMBErrorCode eMBMasterRegCoilsCB(UCHAR *pucRegBuffer, USHORT usAddress,
  */
 eMBErrorCode eMBMasterRegDiscreteCB(UCHAR *pucRegBuffer, USHORT usAddress, USHORT usNDiscrete)
 {
+    MB_LOG(TAG, "%s\r\n", __func__);
     eMBErrorCode eStatus = MB_ENOERR;
     USHORT iRegIndex, iRegBitIndex, iNReg;
     UCHAR *pucDiscreteInputBuf;
@@ -275,7 +343,7 @@ eMBErrorCode eMBMasterRegDiscreteCB(UCHAR *pucRegBuffer, USHORT usAddress, USHOR
 
     /* it already plus one in modbus function method. */
     usAddress--;
-    
+
     if ((usAddress >= DISCRETE_INPUT_START) && (usAddress + usNDiscrete <= DISCRETE_INPUT_START + DISCRETE_INPUT_NDISCRETES))
     {
         iRegIndex = (USHORT)(usAddress - usDiscreteInputStart) / 8;
@@ -296,6 +364,8 @@ eMBErrorCode eMBMasterRegDiscreteCB(UCHAR *pucRegBuffer, USHORT usAddress, USHOR
             xMBUtilSetBits(&pucDiscreteInputBuf[iRegIndex++], iRegBitIndex,
                            usNDiscrete, *pucRegBuffer++);
         }
+        //usr add
+        descret_event_gp_bit_set();
     }
     else
     {
@@ -322,7 +392,7 @@ int get_p_hold_buf(int i)
 }
 
 int get_p_coil_buf(int i)
-{  
+{
     return (int)ucMCoilBuf[ucMBMasterGetDestAddress() - 1][i];
 }
 
@@ -334,13 +404,14 @@ int get_p_disc_buf(int i)
 void modebus_task(void *parameter)
 {
     eMBErrorCode eStatus;
-    eStatus = eMBMasterInit(MB_RTU, 2, 115200, MB_PAR_NONE);
+    eStatus = eMBMasterInit(MB_RTU, 2, 9600, MB_PAR_NONE); //115200
     if (0 == eStatus)
     {
         MB_LOG(TAG, "eMBInit OK. eStatus: %d ", eStatus);
         eStatus = eMBMasterEnable();
         if (0 == eStatus)
         {
+            event_groups_create();
             MB_LOG(TAG, "eMBEnable OK. eStatus: %d", eStatus);
             MB_LOG(TAG, " starting eMBMasterPoll...");
             while (1)
@@ -358,6 +429,7 @@ void modebus_task(void *parameter)
     {
         MB_LOG(TAG, "eMBInit failed !!! eStatus: %d", eStatus);
     }
+    vTaskDelete(NULL);
 }
 
 void SysMonitor(void *parameter)
@@ -406,97 +478,115 @@ void SysMonitor(void *parameter)
 }
 
 // 0x01
-int app_coil_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num) //single or multi-coils
+int app_coil_read(const uint8_t addr, const int func, const int index, const int num) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index; 
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqReadCoils(addr, saddr, num, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 
 //  0x02
-int app_coil_discrete_input_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num) //single or multi-coils
+int app_coil_discrete_input_read(const uint8_t addr, const int func, const int index, const int num) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqReadDiscreteInputs(addr, saddr, num, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 
 //  0x03
-int app_holding_register_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num) //single or multi-coils
+int app_holding_register_read(const uint8_t addr, const int func, const int index, const int num) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqReadHoldingRegister(addr, saddr, num, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 //  0x04
-int app_input_register_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num) //single or multi-coils
+int app_input_register_read(const uint8_t addr, const int func, const int index, const int num) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
     printf("app_input_register_read::saddr : %d\r\n", saddr);
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqReadInputRegister(addr, saddr, num, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 //  0x05
-int app_coil_single_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const USHORT sendData) //single
+int app_coil_single_write(const uint8_t addr, const int func, const int index, const USHORT sendData) //single
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqWriteCoil(addr, saddr, sendData, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 //  0x06
-int app_register_single_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const USHORT sendData) //single
+int app_register_single_write(const uint8_t addr, const int func, const int index, const USHORT sendData) //single
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index; 
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqWriteHoldingRegister(addr, saddr, sendData, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 //  0x0f
-int app_coil_multi_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, UCHAR *sendData) //single or multi-coils
+int app_coil_multi_write(const uint8_t addr, const int func, const int index, const int num, UCHAR *sendData) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqWriteMultipleCoils(addr, saddr, num, sendData, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 
 // 0x10
-int app_register_multi_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, USHORT *sendData) //single or multi-coils
+int app_register_multi_write(const uint8_t addr, const int func, const int index, const int num, USHORT *sendData) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqWriteMultipleHoldingRegister(addr, saddr, num, sendData, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }
 
 // 0x17
-int app_register_multi_write_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, USHORT *sendData) //single or multi-coils
+int app_register_multi_write_read(const uint8_t addr, const int func, const int index, const int num, USHORT *sendData) //single or multi-coils
 {
     const long timeout = T_WAIT_FOREVER;
     eMBMasterReqErrCode errorCode = MB_MRE_NO_ERR;
-    const USHORT saddr = index;//get_func_addr(brand, func, index);
+    const USHORT saddr = index;
+    rs485_trans_toggle(1);
     errorCode = eMBMasterReqReadWriteMultipleHoldingRegister(addr, saddr, num, sendData, saddr, num, timeout);
-
+    rs485_wait_tx_done();
+    rs485_trans_toggle(0);
     return errorCode;
 }

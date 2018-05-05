@@ -28,6 +28,21 @@
 extern "C" {
 #endif
 
+int descret_event_gp_bit_clear();
+
+int input_reg_event_gp_bit_clear();
+
+//int descret_event_gp_bit_set();
+
+//int input_reg_event_gp_bit_set();
+
+int wait_descret_ev_gp_done(int timeout);
+
+int wait_input_reg_ev_gp_done(int timeout);
+
+
+
+
 int get_p_reg_in_buf(int i);
 
 int get_p_hold_buf(int i);
@@ -41,31 +56,31 @@ void SysMonitor(void *parameter);
 void modebus_task(void *parameter);
 
 //  0x01
-int app_coil_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num); //single or multi-coils
+int app_coil_read(const uint8_t addr, const int func, const int index, const int num); //single or multi-coils
 
 //  0x02
-int app_coil_discrete_input_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num); //single or multi-coils
+int app_coil_discrete_input_read(const uint8_t addr, const int func, const int index, const int num); //single or multi-coils
 
 //  0x03
-int app_holding_register_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num); //single or multi-coils
+int app_holding_register_read(const uint8_t addr, const int func, const int index, const int num); //single or multi-coils
 
 //  0x04
-int app_input_register_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num); //single or multi-coils
+int app_input_register_read(const uint8_t addr, const int func, const int index, const int num); //single or multi-coils
 
 //  0x05
-int app_coil_single_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const USHORT sendData); //single
+int app_coil_single_write(const uint8_t addr, const int func, const int index, const USHORT sendData); //single
 
 //  0x06
-int app_register_single_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const USHORT sendData); //single
+int app_register_single_write(const uint8_t addr, const int func, const int index, const USHORT sendData); //single
 
 //  0x0f
-int app_coil_multi_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, UCHAR *sendData); //single or multi-coils
+int app_coil_multi_write(const uint8_t addr, const int func, const int index, const int num, UCHAR *sendData); //single or multi-coils
 
 // 0x10
-int app_register_multi_write(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, USHORT *sendData); //single or multi-coils
+int app_register_multi_write(const uint8_t addr, const int func, const int index, const int num, USHORT *sendData); //single or multi-coils
 
 // 0x17
-int app_register_multi_write_read(const uint8_t addr, const brandType_t brand, const int func, const int index, const int num, USHORT *sendData); //single or multi-coils
+int app_register_multi_write_read(const uint8_t addr, const int func, const int index, const int num, USHORT *sendData); //single or multi-coils
 
 #ifdef __cplusplus
 }
