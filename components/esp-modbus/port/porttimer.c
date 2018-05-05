@@ -119,7 +119,7 @@ BOOL xMBMasterPortTimersInit(USHORT usTim1Timerout50us)
 INLINE
 void vMBMasterPortTimersT35Enable()
 {
-    USHORT timer_tick = 1000;
+    USHORT timer_tick = 2500;//1000;
     /* Set current timer mode, don't change it.*/
     vMBMasterSetCurTimerMode(MB_TMODE_T35);
     timer_value_update(timer_tick);

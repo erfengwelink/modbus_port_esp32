@@ -57,4 +57,7 @@ void vMBPortExitCritical(void);
 void vMBPortSetWithinException(BOOL bInException);
 BOOL bMBPortIsWithinException(void);
 
+int rs485_wait_tx_done();
+int rs485_trans_toggle(int mode);
+
 #endif

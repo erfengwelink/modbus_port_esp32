@@ -37,19 +37,77 @@
 #include "esp_log.h"
 
 static const char *TAG = "FREE_MODBUS_SERIAL";
+#define MB_LOG(...) ESP_LOGW(__VA_ARGS__)
 
 #define MB_UART UART_NUM_2
 #define MB_UART_TX_PIN 33
 #define MB_UART_RX_PIN 34
+#define MB_UART_EN_PIN 12
 
 #define MB_UART_BUF_SIZE (1024)
+#define RS_TX_MODE 1
+#define RS_RX_MODE 0
 
+static uint8_t RS485Mode = RS_RX_MODE;
 static QueueHandle_t mb_uart_queue;
 static uint8_t *mbDataP = NULL;
 
 /* ----------------------- static functions ---------------------------------*/
 static void prvvUARTTxReadyISR(void);
 static void prvvUARTRxISR(void);
+
+static int rs485_en_pin_cfg()
+{
+    gpio_config_t io_conf;
+    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    //set as output mode
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    //bit mask of the pins that you want to set,e.g.GPIO18/19
+    io_conf.pin_bit_mask = GPIO_SEL_12;
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //disable pull-up mode
+    io_conf.pull_up_en = 0;
+    //configure GPIO with the given settings
+    gpio_config(&io_conf);
+    //init rs485 default in rx mode
+    gpio_set_level(MB_UART_EN_PIN, RS485Mode);
+
+    return 0;
+}
+
+int rs485_wait_tx_done()
+{
+    return uart_wait_tx_done(MB_UART, 10);
+}
+
+int rs485_trans_toggle(int mode)
+{
+    if (RS_TX_MODE != RS485Mode)
+    {
+        if (RS_TX_MODE == mode)
+        {
+            RS485Mode = mode;
+            gpio_set_level(MB_UART_EN_PIN, RS485Mode);
+            //ESP_LOGI(TAG, "RS_TX_MODE\r\n");
+        }
+    }
+    else if (RS_RX_MODE != RS485Mode)
+    {
+        if (RS_RX_MODE == mode)
+        {
+            RS485Mode = mode;
+            gpio_set_level(MB_UART_EN_PIN, RS485Mode);
+            //ESP_LOGI(TAG, "RS_RX_MODE\r\n");
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "nput param invalid / already in mode\r\n");
+        //ESP_LOGI(TAG, "input param invalid / already in mode ignore this time operate!");
+    }
+    return 0;
+}
 
 static uint8_t mb_serial_read(uint8_t *data, uint8_t size)
 {
@@ -68,10 +126,12 @@ static void uart_event_task(void *pvParameters)
     uart_event_t event;
     size_t buffered_size;
     uint8_t *dtmp = (uint8_t *)malloc(MB_UART_BUF_SIZE);
+    uint8_t *ptr = NULL;
+    uint8_t size = 0;
     for (;;)
     {
         //Waiting for UART event.
-        if (xQueueReceive(mb_uart_queue, (void *)&event, (portTickType)portMAX_DELAY))
+        if (xQueueReceive(mb_uart_queue, (void *)&event, (portTickType)portMAX_DELAY)) //
         {
             bzero(dtmp, MB_UART_BUF_SIZE);
             //ESP_LOGI(TAG, "uart[%d] event:", MB_UART);
@@ -82,26 +142,51 @@ static void uart_event_task(void *pvParameters)
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
             case UART_DATA:
+            {
                 //ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
-                uart_read_bytes(MB_UART, dtmp, event.size, portMAX_DELAY);
+                uart_read_bytes(MB_UART, dtmp, event.size, portMAX_DELAY); //portMAX_DELAY
+                ESP_LOGI(TAG, "[DATA EVT]: size:%d", event.size);
 
 #if 0
-                    ESP_LOGI(TAG, "[DATA EVT]:");
-                    for(int i = 0; i < event.size; i++)
-                        printf("|%02x", dtmp[i]);
-                    printf("\r\n");
+                
+                for (int i = 0; i < event.size; i++)
+                    printf("|%02x", dtmp[i]);
+                printf("\r\n");
 #endif
 
                 //mb_buffer_in(dtmp, (uint8_t)event.size);
                 //virtual_serial_read();
-                mb_serial_read(dtmp, event.size);
+                if (event.size > 1) // ignore char 0x00
+                {
+                    if (event.size == 5)
+                    {
+                        for (int i = 0; i < event.size; i++)
+                            printf("|%02x", dtmp[i]);
+                        printf("\r\n---------invalid addr data----------\r\n");
+                    }
+                    else
+                    {
+                        if (0 == dtmp[0])
+                        {
+                            ptr = dtmp + 1;
+                            size = event.size - 1;
+                        }
+                        else
+                        {
+                            ptr = dtmp;
+                            size = event.size;
+                        }
+                        mb_serial_read(ptr, size);
+                    }
+                }
 
                 uart_flush_input(MB_UART);
 
                 //    ESP_LOGI(TAG, "|%02X", dtmp[i]);
                 //uart_write_bytes(MB_UART, (const char*) dtmp, event.size);
                 //uart_write_bytes(MB_UART, (const char*)"qqqq", 4);
-                break;
+            }
+            break;
             //Event of HW FIFO overflow detected
             case UART_FIFO_OVF:
                 ESP_LOGI(TAG, "hw fifo overflow");
@@ -168,6 +253,7 @@ static void uart_event_task(void *pvParameters)
 }
 
 /* ----------------------- Start implementation -----------------------------*/
+#if 0
 void vMBPortSerialEnable(BOOL xRxEnable, BOOL xTxEnable)
 {
     /* If xRXEnable enable serial receive interrupts. If xTxENable enable
@@ -176,22 +262,26 @@ void vMBPortSerialEnable(BOOL xRxEnable, BOOL xTxEnable)
     vMBPortEnterCritical();
     UCHAR len = get_s_usLength() + 1;
 
-    //ESP_LOGI(TAG, "get_usLength:%d xRxEnable: %s | xTxEnable: %s", len, xRxEnable?"on":"off",xTxEnable?"on":"off");
+    ESP_LOGI(TAG, "get_usLength:%d xRxEnable: %s | xTxEnable: %s", len, xRxEnable?"on":"off",xTxEnable?"on":"off");
 
     if (xTxEnable && !xRxEnable)
     {
+        rs485_trans_toggle(RS_TX_MODE);
         for (int i = 0; i < len; i++)
             prvvUARTTxReadyISR();
+        rs485_wait_tx_done();
+        rs485_trans_toggle(RS_RX_MODE);
     }
     else if (!xTxEnable && xRxEnable)
     {
-        //set_eRcvState(2);     //STATE_M_RX_RCV
+        
     }
     else
     {
     }
     vMBPortExitCritical();
 }
+#endif
 
 BOOL xMBPortSerialInit(UCHAR ucPORT, ULONG ulBaudRate, UCHAR ucDataBits, eMBParity eParity)
 {
@@ -239,6 +329,8 @@ BOOL xMBPortSerialInit(UCHAR ucPORT, ULONG ulBaudRate, UCHAR ucDataBits, eMBPari
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE};
     uart_param_config(MB_UART, &uart_config);
 
+    rs485_en_pin_cfg();
+
     //Set UART log level
     esp_log_level_set(TAG, ESP_LOG_INFO);
     //Set UART pins (using UART0 default pins ie no changes.)
@@ -249,10 +341,10 @@ BOOL xMBPortSerialInit(UCHAR ucPORT, ULONG ulBaudRate, UCHAR ucDataBits, eMBPari
     //Set uart pattern detect function.
     //uart_enable_pattern_det_intr(MB_UART, '+', PATTERN_CHR_NUM, 10000, 10, 10);
     //Reset the pattern queue length to record at most 20 pattern positions.
-    uart_pattern_queue_reset(MB_UART, 20);
+    //uart_pattern_queue_reset(MB_UART, 20);
 
     //Create a task to handler UART event from ISR
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, configMAX_PRIORITIES, NULL);
 
     return TRUE;
 }
@@ -313,12 +405,20 @@ void vMBMasterPortSerialEnable(BOOL xRxEnable, BOOL xTxEnable)
 
     if (xTxEnable && !xRxEnable)
     {
+        //uart_disable_rx_intr(MB_UART);
+
+        //rs485_trans_toggle(RS_TX_MODE);
         for (int i = 0; i < len; i++)
             prvvUARTTxReadyISR();
+        //rs485_wait_tx_done();
+        //rs485_trans_toggle(RS_RX_MODE);
     }
     else if (!xTxEnable && xRxEnable)
     {
+        //uart_disable_tx_intr(MB_UART);
+        //uart_enable_rx_intr(MB_UART);
         //set_eRcvState(2);//STATE_M_RX_RCV
+        //rs485_trans_toggle(RS_RX_MODE);
     }
     else
     {

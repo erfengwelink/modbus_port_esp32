@@ -74,7 +74,7 @@ BOOL xMBMasterPortEventPost(eMBMasterEventType eEvent)
 BOOL xMBMasterPortEventGet(eMBMasterEventType *eEvent)
 {
     BOOL xEventHappened = FALSE;
-    if (pdTRUE == xQueueReceive(xQueueMasterHdl, eEvent, portTICK_RATE_MS * 50))
+    if (pdTRUE == xQueueReceive(xQueueMasterHdl, eEvent, portTICK_RATE_MS * 10))
     {
         xEventHappened = TRUE;
     }

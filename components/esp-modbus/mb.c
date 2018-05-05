@@ -252,7 +252,7 @@ eMBMasterDisable(void)
 	}
 	return eStatus;
 }
-
+//#include "stdio.h"
 eMBErrorCode
 eMBMasterPoll(void)
 {
@@ -280,17 +280,23 @@ eMBMasterPoll(void)
 		switch (eEvent)
 		{
 		case EV_MASTER_PROCESS_SUCESS: //0x20
+			//printf("%s:EV_MASTER_PROCESS_SUCESS\r\n", __func__);
 			break;
 		case EV_MASTER_ERROR_RESPOND_TIMEOUT: //0x40
+			//printf("%s:EV_MASTER_ERROR_RESPOND_TIMEOUT\r\n", __func__);
 			break;
 		case EV_MASTER_ERROR_RECEIVE_DATA: //0x80
+			//printf("%s:EV_MASTER_ERROR_RECEIVE_DATA\r\n", __func__);
 			break;
 		case EV_MASTER_ERROR_EXECUTE_FUNCTION: //0x100
+			//printf("%s:EV_MASTER_ERROR_EXECUTE_FUNCTION\r\n", __func__);
 			break;
 		case EV_MASTER_READY: //0x01
+			//printf("%s:EV_MASTER_READY\r\n", __func__);
 			break;
 
 		case EV_MASTER_FRAME_RECEIVED: //0x02
+			//printf("%s:EV_MASTER_FRAME_RECEIVED\r\n", __func__);
 			eStatus = peMBMasterFrameReceiveCur(&ucRcvAddress, &ucMBFrame, &usLength);
 			/* Check if the frame is for us. If not ,send an error process event. */
 			if ((eStatus == MB_ENOERR) && (ucRcvAddress == ucMBMasterGetDestAddress()))
@@ -305,6 +311,7 @@ eMBMasterPoll(void)
 			break;
 
 		case EV_MASTER_EXECUTE: //0x04
+			//printf("%s:EV_MASTER_EXECUTE\r\n", __func__);
 			ucFunctionCode = ucMBFrame[MB_PDU_FUNC_OFF];
 			eException = MB_EX_ILLEGAL_FUNCTION;
 			/* If receive frame has exception .The receive function code highest bit is 1.*/
@@ -359,12 +366,14 @@ eMBMasterPoll(void)
 			break;
 
 		case EV_MASTER_FRAME_SENT: //0x08
+		//printf("%s:EV_MASTER_FRAME_SENT\r\n", __func__);
 			/* Master is busy now. */
 			vMBMasterGetPDUSndBuf(&ucMBFrame);
 			eStatus = peMBMasterFrameSendCur(ucMBMasterGetDestAddress(), ucMBFrame, usMBMasterGetPDUSndLength());
 			break;
 
 		case EV_MASTER_ERROR_PROCESS: //0x10
+		//printf("%s:EV_MASTER_ERROR_PROCESS\r\n", __func__);
 									  /* Execute specified error process callback function. */
 			errorType = eMBMasterGetErrorType();
 			vMBMasterGetPDUSndBuf(&ucMBFrame);

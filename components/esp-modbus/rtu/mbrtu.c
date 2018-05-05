@@ -215,7 +215,11 @@ eMBMasterRTUSend(UCHAR ucSlaveAddress, const UCHAR *pucFrame, USHORT usLength)
 
         /* Activate the transmitter. */
         eSndState = STATE_M_TX_XMIT;
+        //printf("#Activate the transmitter#\r\n");
+        //rs485_trans_toggle(1);
         vMBMasterPortSerialEnable(FALSE, TRUE);
+        //rs485_wait_tx_done();
+        //rs485_trans_toggle(0);
     }
     else
     {
