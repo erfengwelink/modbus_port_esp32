@@ -15,6 +15,7 @@
 #include "app_console.h"
 
 
+
 static const char* TAG = "CMD";
 
 #define CONFIG_STORE_HISTORY 0
@@ -69,20 +70,69 @@ static void register_free()
 static int restart(int argc, char** argv)
 {
     ESP_LOGI(__func__, "Restarting");
+    int addr = 1;
+    int dev = 0;
     int mode = 0;
     int speed = 0;
     int temp = 0;
     int swing = 0;
     int set = 0;
 
-    assert(3 == argc);
+    assert(4 == argc);
     //uint16_t rw_data = 0;
-    int inout = atoi(argv[1]);
-    int acoffset = atoi(argv[2]);
-    app_ac_get_param_ex(1, inout, BRAND_MIDEA, &mode, &temp, &speed, &swing, &set);
-    ESP_LOGI(TAG, "app_ac_get_param_ex :: mode:%d | temp = %d | speed = %d | swing = %d | set = %d", 
-    mode, temp, speed, swing, set);
+    dev = atoi(argv[2]);
+    int smode = atoi(argv[3]);
+    int stemp = atoi(argv[3]);
+    int ison = atoi(argv[3]);
+    speed = atoi(argv[3]);
+    int cmd = atoi(argv[1]);
+    int inout = atoi(argv[2]);
+    int acoffset = atoi(argv[3]);
+
+    switch(cmd){
+        case 0:
+        app_ac_set_power(addr, dev, ison?1:0);
+        break;
+        case 1:
+        app_ac_set_temp(addr, dev, stemp);
+        break;
+        case 2:
+        app_ac_set_mode(addr, dev, smode);
+        break;
+        case 3:
+        app_ac_set_speed(addr, dev, speed);
+        break;
+        case 4:
+        app_ac_set_auxisetting(addr, dev, 0x01<<ison, 0);
+        break;
+        case 5:
+        app_ac_set_speed(addr, dev, ison?0x11:0);
+
+        break;
+        case 6:
+        
+        app_ac_get_param(addr, dev, BRAND_MIDEA, &mode, &temp, &speed);
+        
+        ESP_LOGI(TAG, "app_ac_get_param_ex :: mode:%d | temp = %d | speed = %d",
+            mode, temp, speed);
+        break;
+        case 7:
+        
+        app_ac_get_param_ex(1, dev, BRAND_MIDEA, &mode, &temp, &speed, &swing, &set);
+        
+        ESP_LOGI(TAG, "app_ac_get_param_ex :: mode:%d | temp = %d | speed = %d | swing = %d | set = %d", 
+        mode, temp, speed, swing, set);
+
+        break;
+        default:
+        read_all_stuff_online_dev(inout, acoffset);
+        break;
+    }
+    //app_ac_get_param_ex(1, inout, BRAND_MIDEA, &mode, &temp, &speed, &swing, &set);
+    //ESP_LOGI(TAG, "app_ac_get_param_ex :: mode:%d | temp = %d | speed = %d | swing = %d | set = %d", 
+    //mode, temp, speed, swing, set);
     //esp_restart();
+
     return 0;
 }
 
