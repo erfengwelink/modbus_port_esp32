@@ -18,7 +18,7 @@ typedef enum ac_mode_t {
 
 typedef enum ac_swing_t {
     AC_SWG_H_V_STOP = 0x00,
-    AC_SWG_H_V_RUN  = 0x11,
+    AC_SWG_H_V_RUN = 0x11,
     AC_SWG_H_V_RESET = 0x22,
     AC_SWG_H_RUN = 0x10,
     AC_SWG_V_RUN = 0x01
@@ -77,7 +77,7 @@ typedef enum {
     MD_CURR_AUTO_MODE_R,
     MD_CURR_LOCK_MODE_R,
     MD_IGNOR_0,
-    
+
     MD_PWR_OFF_R,
     MD_PWR_ON_R,
     //SPEED
@@ -98,7 +98,7 @@ typedef enum {
     MD_OIL_RETURN_R,
     MD_IGNOR_4,
     MD_IGNOR_5,
-    
+
     //auxi
     MD_ECON_RUN_OFF_R,
     MD_ECON_RUN_ON_R,
@@ -132,7 +132,7 @@ typedef enum {
     MD_HEAT_MODE_LOCK_R,
     MD_CONTROLLER_LOCK_R,
     MD_TELECONTROLLER_LOCK_R,
-    
+
     MD_COIL_PARAM_INVALID_R
 } readDescreteResult_t;
 
@@ -256,27 +256,38 @@ typedef enum {
     MD_PARAM_MAX,
 } mideaReqParam_t;
 
+typedef enum {
+    RET_NONE = -1,
+    RET_ALL_OK = 0,
+    RET_RSP_FAIL,
+    RET_CB_TIMEOUT,
+    RET_ERR,
+    RET_MAX
+} ret_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // AC open power 1/ON, 0/OFF
-int app_ac_set_power(const int addr, const int devIDs, const int ison);
+ret_t app_ac_set_power(const int addr, const int devIDs, const int ison);
 // AC mode control ADDR:485 address, NUM: each room AC ID.
-int app_ac_set_mode(const int addr, const int devIDs, const ac_mode_t mode);
+ret_t app_ac_set_mode(const int addr, const int devIDs, const ac_mode_t mode);
 // AC temperature need 10, such as 26.0 degree 260, range is 160 ~ 300
-int app_ac_set_temp(const int addr, const int devIDs, const int temp);
+ret_t app_ac_set_temp(const int addr, const int devIDs, const int temp);
 // AC speed level
-int app_ac_set_speed(const int addr, const int devIDs, const ac_speed_t speed);
+ret_t app_ac_set_speed(const int addr, const int devIDs, const ac_speed_t speed);
 // AC swing H dir and V dir.
-int app_ac_set_swing(const int addr, const int devIDs, const ac_swing_t hs, const ac_swing_t vs);
-int app_ac_set_setting(const int addr, const int devIDs, ac_setting_id_t *psettings, const int cnt);
+ret_t app_ac_set_swing(const int addr, const int devIDs, const ac_swing_t hs, const ac_swing_t vs);
+ret_t app_ac_set_setting(const int addr, const int devIDs, ac_setting_id_t *psettings, const int cnt);
 
-int app_ac_set_auxisetting(const int addr, const int devIDs, MDAuxiSet_t psettings, const int cnt);
+ret_t app_ac_set_auxisetting(const int addr, const int devIDs, MDAuxiSet_t psettings, const int cnt);
 
 // AC get current parameters if NULL skip value.
-int app_ac_get_param(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed);
-int app_ac_get_param_ex(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed, int *pswing, int *psetting);
+ret_t app_ac_get_param(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed);
+ret_t app_ac_get_param_ex(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed, int *pswing, int *psetting);
+
+ret_t read_all_stuff_online_dev(int n, int devIDs);
 
 #ifdef __cplusplus
 }

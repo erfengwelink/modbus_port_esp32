@@ -31,8 +31,8 @@ static const char *TAG = "MBAPP";
 
 #define DATA_CONVERT_ADDR 0x01
 #define GLOBAL_OFFSET 0
-//#define MB_LOG(...)
-#define MB_LOG(...) ESP_LOGW(__VA_ARGS__)
+#define MB_LOG(...)
+//#define MB_LOG(...) ESP_LOGW(__VA_ARGS__)
 #define APP_MB_WRITE true
 #define APP_MB_READ false
 
@@ -186,8 +186,13 @@ const static inputIndex_t inputTab[] = {
     {MD_INPUT_IN_ONLINE_16_31, 20, 16, 0, IN_MACHINE_16_31_ONLINE},
     {MD_INPUT_IN_ONLINE_32_47, 21, 16, 0, IN_MACHINE_32_47_ONLINE},
     {MD_INPUT_IN_ONLINE_48_63, 22, 16, 0, IN_MACHINE_48_63_ONLINE},
-    
+
 };
+
+void mfree(char *s)
+{
+    printf("%s#Free: %d\n", s, esp_get_free_heap_size());
+}
 
 static int get_dest_addr(const int index, const int acNo, const int offset)
 {
@@ -233,15 +238,15 @@ static int acnum2addr(
     return addr;
 }
 
-static void online_bits_dump(const int data)
+static void online_dev_bits_dump(const int data)
 {
     printf(" ' '---> offline\r\n");
     printf(" '*'---> online\r\n");
     printf(" 0 1 2 3 4 5 6 7 8 9 A B C D E F \r\n");
     printf(" - - - - - - - - - - - - - - - - \r\n");
-    for(int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++)
     {
-        if(data & (0x01<<i))
+        if (data & (0x01 << i))
         {
             printf(" *");
         }
@@ -268,8 +273,8 @@ static int input_reg_unpack(inputParam_t param, int *pdata)
     {
         *pdata = data;
         res = entry.res;
-        online_bits_dump(data);
-        //online_bits_dump(7);
+        online_dev_bits_dump(data);
+        //online_dev_bits_dump(7);
     }
     return res;
 }
@@ -292,11 +297,11 @@ static int discrete_reg_unpack(descParam_t param, int *pdata)
         if (data & (0x01 << start))
         {
             result += 1;
-            MB_LOG("$", "[[[[ bit param on ]]]");
+            MB_LOG("$", "[[[[ bit -> '1' ]]]");
         }
         else
         {
-            MB_LOG("$", "[[[[ bit param off ]]]");
+            MB_LOG("$", "[[[[ bit -> '0' ]]]");
         }
         *pdata = result;
         return 0;
@@ -317,9 +322,9 @@ static int discrete_reg_unpack(descParam_t param, int *pdata)
     return -1;
 }
 
-static int load_midea_param(const mideaReqParam_t req, const int acNo, uint16_t wdata)
+static ret_t load_midea_param(const mideaReqParam_t req, const int acNo, uint16_t wdata)
 {
-    int ret = -1;
+    ret_t ret = RET_NONE;
     MB_LOG(TAG, "req = %d", req);
     int regAddr = 0;
     uint16_t sendData = wdata;
@@ -335,31 +340,31 @@ static int load_midea_param(const mideaReqParam_t req, const int acNo, uint16_t 
         assert(APP_MB_READ == rw);
         num = mMapTable[0].segOffset;
         regAddr = acnum2addr(INNER_DEV, acNo, singleOffset, func);
-        ret = app_coil_discrete_input_read(DATA_CONVERT_ADDR, BRAND_MIDEA, func, regAddr, num);
+        ret = app_coil_discrete_input_read(DATA_CONVERT_ADDR, func, regAddr, num);
         MB_LOG(TAG, " $$app_coil_discrete_input_read$$ret = %d", ret);
         break;
     case MIDEA_READ_INPUT_REG:
         assert(APP_MB_READ == rw);
         num = mMapTable[1].segOffset;
         regAddr = acnum2addr(INNER_DEV, acNo, singleOffset, func);
-        ret = app_input_register_read(DATA_CONVERT_ADDR, BRAND_MIDEA, func, regAddr, num); //single or multi-coils
+        ret = app_input_register_read(DATA_CONVERT_ADDR, func, regAddr, num); //single or multi-coils
         MB_LOG(TAG, " $$app_input_register_read$$ret = %d", ret);
         break;
     case MIDEA_WRITE_HOLDING_REG:
         assert(APP_MB_WRITE == rw);
         regAddr = acnum2addr(INNER_DEV, acNo, singleOffset, func);
-        ret = app_register_single_write(DATA_CONVERT_ADDR, BRAND_MIDEA, func, regAddr, sendData);
+        ret = app_register_single_write(DATA_CONVERT_ADDR, func, regAddr, sendData);
         MB_LOG(TAG, " $$$$ret = %d", ret);
         break;
     default:
-        return -1;
+        
         break;
     }
     MB_LOG(TAG, "acNo :%d || offset:%d | FUNC:%2X ret = %d ", acNo, singleOffset, func, ret);
     return ret;
 }
 
-int app_ac_set_power(const int addr, const int devIDs, const int ison)
+ret_t app_ac_set_power(const int addr, const int devIDs, const int ison)
 {
     uint16_t wValue = (uint16_t)get_p_hold_buf(W_MODE_SET - 1);
 
@@ -371,10 +376,10 @@ int app_ac_set_power(const int addr, const int devIDs, const int ison)
     {
         wValue |= MD_POWER_STATE;
     }
-    return load_midea_param(MD_PWR_SET, devIDs, wValue); //app_register_single_write(0x01, BRAND_MIDEA, func, regAddr, wValue);
+    return (ret_t)load_midea_param(MD_PWR_SET, devIDs, wValue); //app_register_single_write(0x01, BRAND_MIDEA, func, regAddr, wValue);
 }
 
-int app_ac_set_mode(const int addr, const int devIDs, const ac_mode_t mode)
+ret_t app_ac_set_mode(const int addr, const int devIDs, const ac_mode_t mode)
 {
     assert(mode < ACMODE_MAX);
     uint16_t wValue = (uint16_t)get_p_hold_buf(W_MODE_SET - 1) & ~MD_MODE_MASK;
@@ -406,26 +411,26 @@ int app_ac_set_mode(const int addr, const int devIDs, const ac_mode_t mode)
         break;
     }
     wValue &= MD_MODE_MASK;
-    return load_midea_param(MD_MODE_SET, devIDs, wValue);
+    return (ret_t)load_midea_param(MD_MODE_SET, devIDs, wValue);
 }
 
 // AC temperature need 10, such as 26.0 degree 260, range is 160 ~ 300
-int app_ac_set_temp(const int addr, const int devIDs, const int temp)
+ret_t app_ac_set_temp(const int addr, const int devIDs, const int temp)
 {
     uint16_t wValue = temp / 10;
     if (temp >= 160 && temp <= 320)
     {
-        return load_midea_param(MD_TEMP_SET, devIDs, wValue);
+        return (ret_t)load_midea_param(MD_TEMP_SET, devIDs, wValue);
     }
     else
     {
         MB_LOG(TAG, "invalid temp value");
-        return -1;
+        return RET_NONE;
     }
 }
 
 // AC speed level
-int app_ac_set_speed(const int addr, const int devIDs, const ac_speed_t speed)
+ret_t app_ac_set_speed(const int addr, const int devIDs, const ac_speed_t speed)
 {
     assert(speed < AC_SPEED_MAX);
     uint16_t wValue = (uint16_t)get_p_hold_buf(W_FAN_SPEED_SET - 1);
@@ -453,15 +458,15 @@ int app_ac_set_speed(const int addr, const int devIDs, const ac_speed_t speed)
     wValue &= MD_WIND_SPEED_MASK;
     if (wValue)
     {
-        return load_midea_param(MD_SPEED_SET, devIDs, wValue);
+        return (ret_t)load_midea_param(MD_SPEED_SET, devIDs, wValue);
     }
     else
     {
-        return -1;
+        return RET_NONE;
     }
 }
 
-int app_ac_set_auxisetting(const int addr, const int devIDs, MDAuxiSet_t psettings, const int cnt)
+ret_t app_ac_set_auxisetting(const int addr, const int devIDs, MDAuxiSet_t psettings, const int cnt)
 {
     uint16_t wValue = (uint16_t)get_p_hold_buf(W_AUXI_FUNC - 1);
 
@@ -480,14 +485,14 @@ int app_ac_set_auxisetting(const int addr, const int devIDs, MDAuxiSet_t psettin
         wValue |= MD_AUXI_AIR_FRESH;
         break;
     default:
-        MB_LOG(TAG, "invalid psettings value return -1");
-        return -1;
+        MB_LOG(TAG, "invalid psettings value return RET_NONE");
+        return RET_NONE;
     }
     wValue &= MD_AUXI_MASK;
-    return load_midea_param(MD_AUXI_SET, devIDs, wValue);
+    return (ret_t)load_midea_param(MD_AUXI_SET, devIDs, wValue);
 }
 
-int app_ac_set_swing(const int addr, const int devIDs, const ac_swing_t hs, const ac_swing_t vs)
+ret_t app_ac_set_swing(const int addr, const int devIDs, const ac_swing_t hs, const ac_swing_t vs)
 {
     uint16_t wValue = (uint16_t)get_p_hold_buf(W_AUXI_FUNC - 1);
 
@@ -502,7 +507,7 @@ int app_ac_set_swing(const int addr, const int devIDs, const ac_swing_t hs, cons
     default:
         break;
     }
-    return load_midea_param(MD_AUXI_SET, devIDs, wValue);
+    return (ret_t)load_midea_param(MD_AUXI_SET, devIDs, wValue);
 }
 
 static int update_target_ac_read_data(mideaReqParam_t type, int devIDs)
@@ -510,8 +515,9 @@ static int update_target_ac_read_data(mideaReqParam_t type, int devIDs)
     return load_midea_param(type, devIDs, 0);
 }
 
-int app_ac_get_param(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed)
+ret_t app_ac_get_param(const int addr, const int devIDs, const brandType_t brand, int *pmode, int *ptemp, int *pspeed)
 {
+    ret_t ret = RET_NONE;
     int updated = -1;
     int pwr = -1;
 
@@ -519,36 +525,58 @@ int app_ac_get_param(const int addr, const int devIDs, const brandType_t brand, 
     updated = update_target_ac_read_data(MD_DESCRETE_GET, devIDs);
     if (0 == updated) //update ok
     {
-        discrete_reg_unpack(MD_DESC_PWR, &pwr);
-        MB_LOG(TAG, "pwr:%d", pwr);
-        discrete_reg_unpack(MD_DESC_MODE, pmode);
-        MB_LOG(TAG, "mode:%d", *pmode);
+        descret_event_gp_bit_clear();
+        if (0 == wait_descret_ev_gp_done(2000))
+        {
+            discrete_reg_unpack(MD_DESC_PWR, &pwr);
+            MB_LOG(TAG, "pwr:%d", pwr);
+            discrete_reg_unpack(MD_DESC_MODE, pmode);
+            MB_LOG(TAG, "mode:%d", *pmode);
 
-        discrete_reg_unpack(MD_DESC_SPEED, pspeed);
-        MB_LOG(TAG, "pspeed:%d", *pspeed);
+            discrete_reg_unpack(MD_DESC_SPEED, pspeed);
+            MB_LOG(TAG, "pspeed:%d", *pspeed);
+            ret = RET_ALL_OK;
+        }
+        else
+        {
+            MB_LOG(TAG, "ERR:wait_descret_ev_gp_done timeout!!!");
+            ret = RET_CB_TIMEOUT;
+        }
     }
     else
     {
+        ret = RET_RSP_FAIL;
     }
-
+    
     int temp = 0;
     updated = update_target_ac_read_data(MD_TEMP_GET, devIDs);
     if (0 == updated) //update ok
     {
-        input_reg_unpack(MD_INPUT_CUR_TEMP, &temp);
-        *ptemp = (temp & (0x01 << 15) ? temp - 65536 : temp) * 2 + 40;
-        MB_LOG(TAG, "temp : %d ptemp:%d", temp, *ptemp);
+        input_reg_event_gp_bit_clear();
+        if (0 == wait_input_reg_ev_gp_done(2000))
+        {
+            input_reg_unpack(MD_INPUT_CUR_TEMP, &temp);
+            *ptemp = (temp & (0x01 << 15) ? temp - 65536 : temp) * 2 + 40;
+            MB_LOG(TAG, "temp : %d ptemp:%d", temp, *ptemp);
+            ret = RET_ALL_OK;
+        }
+        else
+        {
+            MB_LOG(TAG, "ERR:wait_dinput_reg_ev_gp_done timeout!!!");
+            ret = RET_CB_TIMEOUT;
+        }
     }
     else
     {
         MB_LOG(TAG, "update_target_ac_read_data ->MD_TEMP_GET failed!!!");
+        ret = RET_RSP_FAIL;
     }
 #endif
 
-    return 0;
+    return ret;
 }
 
-int app_ac_get_param_ex(const int addr,
+ret_t app_ac_get_param_ex(const int addr,
                         const int devIDs,
                         const brandType_t brand,
                         int *pmode,
@@ -557,7 +585,7 @@ int app_ac_get_param_ex(const int addr,
                         int *pswing,
                         int *psetting)
 {
-    int ret = -1;
+    ret_t ret = RET_NONE;
     int updated = -1;
     int pwr = -1;
     int economic = -1;
@@ -572,58 +600,84 @@ int app_ac_get_param_ex(const int addr,
     updated = update_target_ac_read_data(MD_DESCRETE_GET, devIDs);
     if (0 == updated) //update ok
     {
-        ret = discrete_reg_unpack(MD_DESC_PWR, &pwr);
-        MB_LOG(TAG, "pwr:%d ret = %d", pwr, ret);
+        descret_event_gp_bit_clear();
 
-        ret = discrete_reg_unpack(MD_DESC_MODE, pmode);
-        MB_LOG(TAG, "mode:%d ret = %d", *pmode, ret);
+        if (0 == wait_descret_ev_gp_done(2000))
+        {
+            ret = discrete_reg_unpack(MD_DESC_PWR, &pwr);
+            MB_LOG(TAG, "pwr:%d ret = %d", pwr, ret);
+            
+            ret = discrete_reg_unpack(MD_DESC_MODE, pmode);
+            MB_LOG(TAG, "mode:%d ret = %d", *pmode, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_SPEED, pspeed);
-        MB_LOG(TAG, "pspeed:%d ret = %d", *pspeed, ret);
+            ret = discrete_reg_unpack(MD_DESC_SPEED, pspeed);
+            MB_LOG(TAG, "pspeed:%d ret = %d", *pspeed, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_ECON_RUN, &economic);
-        MB_LOG(TAG, "economic:%d ret = %d", economic, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_ECON_RUN, &economic);
+            MB_LOG(TAG, "economic:%d ret = %d", economic, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_ELECTRIC_PAVING, &epaving);
-        MB_LOG(TAG, "epaving:%d ret = %d", epaving, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_ELECTRIC_PAVING, &epaving);
+            MB_LOG(TAG, "epaving:%d ret = %d", epaving, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_SWING, &swing);
-        MB_LOG(TAG, "swing:%d ret = %d", swing, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_SWING, &swing);
+            MB_LOG(TAG, "swing:%d ret = %d", swing, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_AERATION, &aeration);
-        MB_LOG(TAG, "aeration:%d ret = %d", aeration, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_AERATION, &aeration);
+            MB_LOG(TAG, "aeration:%d ret = %d", aeration, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_FRESH, &fresh);
-        MB_LOG(TAG, "fresh:%d ret = %d", fresh, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_FRESH, &fresh);
+            MB_LOG(TAG, "fresh:%d ret = %d", fresh, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_HUMIDIFY, &hum);
-        MB_LOG(TAG, "hum:%d ret = %d", hum, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_HUMIDIFY, &hum);
+            MB_LOG(TAG, "hum:%d ret = %d", hum, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_ADD_OXYGEN, &oxy);
-        MB_LOG(TAG, "oxy:%d ret = %d", oxy, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_ADD_OXYGEN, &oxy);
+            MB_LOG(TAG, "oxy:%d ret = %d", oxy, ret);
 
-        ret = discrete_reg_unpack(MD_DESC_AUXI_DRY, &dry);
-        MB_LOG(TAG, "dry:%d ret = %d", dry, ret);
+            ret = discrete_reg_unpack(MD_DESC_AUXI_DRY, &dry);
+            MB_LOG(TAG, "dry:%d ret = %d", dry, ret);
 
-        *pswing = swing;
+            *pswing = swing;
+
+            ret = RET_ALL_OK;
+        }
+        else
+        {
+            MB_LOG(TAG, "ERR:wait_descret_ev_gp_done timeout!!!");
+            ret = RET_CB_TIMEOUT;
+        }
     }
     else
     {
-        MB_LOG(TAG, "update_target_ac_read_data ->MD_DESCRETE_GET failed!!!");
+        MB_LOG(TAG, "update_target_ac_read_data -> MD_DESCRETE_GET failed!!!");
+        ret = RET_RSP_FAIL;
     }
 
 #if 1
+    
     int temp = 0;
     updated = update_target_ac_read_data(MD_TEMP_GET, devIDs);
     if (0 == updated) //update ok
     {
-        input_reg_unpack(MD_INPUT_CUR_TEMP, &temp);
-        *ptemp = (temp & (0x01<<15) ? temp - 65536 : temp)*2 + 40;
-        MB_LOG(TAG, "temp : %d ptemp:%d", temp, *ptemp);
+        input_reg_event_gp_bit_clear();
+        if (0 == wait_input_reg_ev_gp_done(2000))
+        {
+
+            input_reg_unpack(MD_INPUT_CUR_TEMP, &temp);
+            *ptemp = (temp & (0x01 << 15) ? temp - 65536 : temp) * 2 + 40;
+            MB_LOG(TAG, "temp : %d ptemp:%d", temp, *ptemp);
+            ret = RET_ALL_OK;
+        }
+        else
+        {
+            MB_LOG(TAG, "update_target_ac_read_data ->MD_TEMP_GET failed!!!");
+            ret = RET_CB_TIMEOUT;
+        }
     }
     else
     {
         MB_LOG(TAG, "update_target_ac_read_data ->MD_TEMP_GET failed!!!");
+        ret = RET_RSP_FAIL;
     }
 #endif
 
@@ -637,7 +691,6 @@ int read_all_stuff_online_dev(int n, int devIDs)
     if (0 == updated) //update ok
     {
         input_reg_unpack(MD_INPUT_CUR_TEMP + n, &bits);
-
         MB_LOG(TAG, "bits : %d ", bits);
     }
     else
